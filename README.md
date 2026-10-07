@@ -7,7 +7,7 @@ This build is a browser demo. Accounts, votes, saves and invites stay in `localS
 ## Try it
 
 - Member: `moxi@promptlab.example` / `promptlab` (phone `13800138000`)
-- Admin: `admin@promptlab.example` / `promptlab`
+- Admin: `16632905663tao@gmail.com`. Set the password on the sign-in page in the browser. It is not stored in this repo.
 - Invite code: `PLAB-2026`
 - Phone code, always: `246810`
 

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { MOSAIC } from "@/lib/catalog";
 import { safeNext } from "@/lib/format";
 import { isUiLang, tx, type UiLang } from "@/lib/i18n";
-import { useApp } from "@/lib/store";
+import { ADMIN_EMAIL, useApp } from "@/lib/store";
 
 export const Route = createFileRoute("/$lang/login")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -18,11 +18,17 @@ function LoginPage() {
   const lang: UiLang = isUiLang(raw) ? raw : "zh-CN";
   const navigate = useNavigate();
   const login = useApp((s) => s.login);
+  const setAdminPassword = useApp((s) => s.setAdminPassword);
+  const ready = useApp((s) => s.ready);
+  const adminSet = useApp((s) => s.users.some((u) => u.id === "u-admin" && u.password !== ""));
   const loginByPhone = useApp((s) => s.loginByPhone);
   const showToast = useApp((s) => s.showToast);
   const [tab, setTab] = useState<"password" | "code">("password");
   const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
+  const [secret, setSecret] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [reveal, setReveal] = useState(false);
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
@@ -54,7 +60,78 @@ function LoginPage() {
             <span className="text-xl font-bold">提词所 <span className="font-display font-semibold">Prompt Lab</span></span>
           </Link>
           <h1 className="mt-8 text-3xl font-bold">{tx(lang, "登录提词所", "Sign in")}</h1>
-          <p className="mt-2 text-body text-mute">{tx(lang, "欢迎回来。登录后可复制提示词、投票和收藏。", "Welcome back. Sign in to copy, vote and save.")}</p>
+          {!ready ? <p className="mt-4 text-sm text-mute">{tx(lang, "正在准备安全输入…", "Preparing a private input…")}</p> : null}
+          {ready && !adminSet ? (
+            <form
+              className="mt-6 flex flex-col gap-4 rounded-panel border border-line bg-surface p-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (secret.length < 8) {
+                  setError(tx(lang, "管理员密码至少 8 位。", "Use at least 8 characters."));
+                  return;
+                }
+                if (secret === "promptlab") {
+                  setError(tx(lang, "不能使用已经公开的示例密码。", "Don't reuse the published sample password."));
+                  return;
+                }
+                if (secret !== confirm) {
+                  setError(tx(lang, "两次输入不一致。", "The two passwords don't match."));
+                  return;
+                }
+                void (async () => {
+                  await setAdminPassword(secret);
+                  setSecret("");
+                  setConfirm("");
+                  showToast(tx(lang, "管理员密码已保存在这台浏览器", "Admin password saved in this browser"));
+                  navigate({ href: `/${lang}/admin` });
+                })();
+              }}
+            >
+              <div>
+                <h2 className="text-lg font-bold">{tx(lang, "设置管理员密码", "Set the admin password")}</h2>
+                <p className="mt-1 text-fine text-mute">
+                  {tx(
+                    lang,
+                    "邮箱已锁定。密码只在这台浏览器里哈希保存，不会发到对话、服务器或 GitHub。请在下面填写。",
+                    "The email is locked. The password is hashed in this browser only. It is not sent to chat, a server, or GitHub.",
+                  )}
+                </p>
+              </div>
+              <label className="flex flex-col gap-2 text-sm">
+                {tx(lang, "管理员邮箱", "Admin email")}
+                <input value={ADMIN_EMAIL} readOnly className="h-12 rounded-control border border-line bg-bg px-4 text-mute outline-none" />
+              </label>
+              <label className="flex flex-col gap-2 text-sm">
+                {tx(lang, "管理员密码", "Admin password")}
+                <input
+                  type={reveal ? "text" : "password"}
+                  name="new-password"
+                  autoComplete="new-password"
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  className="h-12 rounded-control border border-line-2 bg-bg px-4 outline-none focus:border-ink"
+                />
+              </label>
+              <label className="flex flex-col gap-2 text-sm">
+                {tx(lang, "再次输入", "Confirm password")}
+                <input
+                  type={reveal ? "text" : "password"}
+                  name="confirm-password"
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="h-12 rounded-control border border-line-2 bg-bg px-4 outline-none focus:border-ink"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-fine text-mute">
+                <input type="checkbox" checked={reveal} onChange={(e) => setReveal(e.target.checked)} />
+                {tx(lang, "显示密码，便于核对", "Show the password while checking it")}
+              </label>
+              {error ? <p className="text-fine text-danger">{error}</p> : null}
+              <button type="submit" className="h-11 rounded-control bg-ink font-medium text-on-ink">{tx(lang, "保存并进入后台", "Save and open admin")}</button>
+            </form>
+          ) : null}
+          <p className="mt-6 text-body text-mute">{tx(lang, "欢迎回来。登录后可复制提示词、投票和收藏。", "Welcome back. Sign in to copy, vote and save.")}</p>
           <div className="mt-6 flex gap-6 border-b border-line">
             <button type="button" onClick={() => setTab("password")} className={`pb-3 ${tab === "password" ? "border-b-2 border-ink" : "text-mute"}`}>{tx(lang, "密码登录", "Password")}</button>
             <button type="button" onClick={() => setTab("code")} className={`pb-3 ${tab === "code" ? "border-b-2 border-ink" : "text-mute"}`}>{tx(lang, "验证码登录", "Code")}</button>
@@ -64,12 +141,18 @@ function LoginPage() {
               className="mt-6 flex flex-col gap-4"
               onSubmit={(e) => {
                 e.preventDefault();
-                const user = login(account, password);
-                if (!user) {
-                  setError(tx(lang, "邮箱、手机号或密码不正确。", "Email, phone or password is incorrect."));
-                  return;
-                }
-                finish();
+                void (async () => {
+                  if (!adminSet && account.trim().toLowerCase() === ADMIN_EMAIL) {
+                    setError(tx(lang, "请先在上方设置管理员密码。", "Set the admin password above first."));
+                    return;
+                  }
+                  const user = await login(account, password);
+                  if (!user) {
+                    setError(tx(lang, "邮箱、手机号或密码不正确。", "Email, phone or password is incorrect."));
+                    return;
+                  }
+                  finish();
+                })();
               }}
             >
               <label className="flex flex-col gap-2 text-sm">
@@ -139,7 +222,7 @@ function LoginPage() {
             <Link to="/$lang/register" params={{ lang }} className="font-medium text-ink">{tx(lang, "邀请码注册", "Register with an invite")}</Link>
           </p>
           <p className="mt-6 rounded-panel bg-chip p-3 text-fine text-mute">
-            {tx(lang, "示例账号 moxi@promptlab.example / promptlab。管理员 admin@promptlab.example / promptlab。邀请码 PLAB-2026。", "Sample member moxi@promptlab.example / promptlab. Admin admin@promptlab.example / promptlab. Invite PLAB-2026.")}
+            {tx(lang, "示例成员 moxi@promptlab.example / promptlab。管理员邮箱已锁定，密码只在本机设置，不会写在页面上。邀请码 PLAB-2026。", "Sample member moxi@promptlab.example / promptlab. The admin email is locked; its password is set on this device and is not printed here. Invite PLAB-2026.")}
           </p>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { isUiLang, tx, type UiLang } from "@/lib/i18n";
-import { useApp, type InviteStatus } from "@/lib/store";
+import { ADMIN_EMAIL, useApp, type InviteStatus } from "@/lib/store";
 
 export const Route = createFileRoute("/$lang/admin")({
   component: AdminPage,
@@ -108,7 +108,7 @@ function AdminPage() {
           <div className="mt-6 flex flex-wrap gap-2">
             <button type="button" onClick={() => { saveSettings(); showToast(tx(lang, "设置已保存", "Settings saved")); }} className="h-11 rounded-control bg-ink px-4 text-on-ink">{tx(lang, "保存", "Save")}</button>
             <button type="button" onClick={() => { restoreSettings(); showToast(tx(lang, "已恢复为上次保存的设置", "Restored the last saved settings")); }} className="h-11 rounded-control border border-line-2 px-4">{tx(lang, "恢复", "Restore")}</button>
-            <button type="button" onClick={() => showToast(tx(lang, "已向管理员邮箱发送重新绑定指引", "Rebind instructions sent to the admin email"))} className="h-11 rounded-control border border-line-2 px-4">{tx(lang, "重新绑定邮箱", "Rebind email")}</button>
+            <button type="button" onClick={() => showToast(tx(lang, `管理员邮箱已锁定为 ${ADMIN_EMAIL}`, `Admin email is locked to ${ADMIN_EMAIL}`))} className="h-11 rounded-control border border-line-2 px-4">{tx(lang, "管理员邮箱", "Admin email")}</button>
             <button
               type="button"
               onClick={() => {

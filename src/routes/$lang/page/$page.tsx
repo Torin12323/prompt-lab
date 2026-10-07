@@ -64,7 +64,7 @@ const pages: Record<string, { zhTitle: string; enTitle: string; body: { zh: stri
     enTitle: "Privacy",
     body: [
       { zh: "这个演示把账号、投票、收藏和邀请码保存在你的浏览器里，不会上传到服务器。", en: "This demo keeps accounts, votes, saves and invites in your browser. They are not uploaded." },
-      { zh: "清除站点数据会退出登录并恢复示例库。不要在密码字段填写真实密码。", en: "Clearing site data signs you out and restores the sample library. Do not type a real password." },
+      { zh: "管理员密码在这台浏览器里做哈希后保存，不会上传。清除站点数据后需要重新设置。示例成员密码仍是演示用，不要把常用密码填进去。", en: "The admin password is hashed in this browser and is not uploaded. Clearing site data means setting it again. The sample member password is only a demo — don't reuse a password you use elsewhere." },
     ],
   },
   contact: {

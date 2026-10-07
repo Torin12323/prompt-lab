@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useEffect, useMemo } from "react";
 import { prompts, type PromptItem } from "@/lib/catalog";
+import { passwordMatches, sealPassword } from "@/lib/secret";
 
 export type Role = "member" | "admin";
 
@@ -46,7 +47,7 @@ type State = {
   sortOpen: boolean;
   gateOpen: boolean;
   toast: string | null;
-  login: (emailOrPhone: string, password: string) => Account | null;
+  login: (emailOrPhone: string, password: string) => Promise<Account | null>;
   loginByPhone: (phone: string) => Account | null;
   register: (input: { name: string; email: string; phone: string; password: string; code: string }) => string | null;
   logout: () => void;
@@ -70,7 +71,29 @@ type State = {
   restoreSettings: () => void;
   addInvites: (codes: string[]) => void;
   voidInvites: (codes: string[]) => void;
+  setAdminPassword: (password: string) => Promise<void>;
 };
+
+export const ADMIN_EMAIL = "16632905663tao@gmail.com";
+
+function ensureAdmin(users: Account[], userId: string | null) {
+  const previous = users.find(
+    (u) => u.id === "u-admin" || u.role === "admin" || u.email.toLowerCase() === ADMIN_EMAIL,
+  );
+  const legacy = !previous || previous.password === "" || previous.password === "promptlab";
+  const password = legacy ? "" : previous.password;
+  const nextUsers = users.filter((u) => u.id !== "u-admin" && u.role !== "admin" && u.email.toLowerCase() !== ADMIN_EMAIL);
+  nextUsers.push({
+    id: "u-admin",
+    name: "管理员",
+    email: ADMIN_EMAIL,
+    phone: "",
+    password,
+    role: "admin",
+    joined: previous?.joined ?? "2026-01-08",
+  });
+  return { users: nextUsers, userId: password === "" && userId === "u-admin" ? null : userId };
+}
 
 const seedUsers: Account[] = [
   {
@@ -84,10 +107,10 @@ const seedUsers: Account[] = [
   },
   {
     id: "u-admin",
-    name: "admin",
-    email: "admin@promptlab.example",
-    phone: "13900001111",
-    password: "promptlab",
+    name: "管理员",
+    email: ADMIN_EMAIL,
+    phone: "",
+    password: "",
     role: "admin",
     joined: "2026-01-08",
   },
@@ -127,17 +150,19 @@ export const useApp = create<State>()(
       gateOpen: false,
       toast: null,
       current: () => get().users.find((u) => u.id === get().userId) ?? null,
-      login: (emailOrPhone, password) => {
+      login: async (emailOrPhone, password) => {
         const key = emailOrPhone.trim().toLowerCase();
-        const user = get().users.find(
-          (u) => (u.email.toLowerCase() === key || u.phone === emailOrPhone.trim()) && u.password === password,
-        );
-        if (!user) return null;
+        const phone = emailOrPhone.trim();
+        const user = get().users.find((u) => u.email.toLowerCase() === key || (u.phone !== "" && u.phone === phone));
+        if (!user?.password) return null;
+        if (!(await passwordMatches(user.password, password))) return null;
         set({ userId: user.id });
         return user;
       },
       loginByPhone: (phone) => {
-        const user = get().users.find((u) => u.phone === phone.trim());
+        const trimmed = phone.trim();
+        if (!trimmed) return null;
+        const user = get().users.find((u) => u.phone === trimmed);
         if (!user) return null;
         set({ userId: user.id });
         return user;
@@ -152,7 +177,7 @@ export const useApp = create<State>()(
           if (invite.status === "expired") return "expired";
           if (invite.status === "void") return "void";
         }
-        if (get().users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase())) return "email";
+        if (get().users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase() || email.trim().toLowerCase() === ADMIN_EMAIL)) return "email";
         const id = `u-${Date.now()}`;
         const user: Account = {
           id,
@@ -249,6 +274,14 @@ export const useApp = create<State>()(
         set({
           invites: get().invites.map((i) => (codes.includes(i.code) ? { ...i, status: "void" as const } : i)),
         }),
+      setAdminPassword: async (password) => {
+        const sealed = await sealPassword(password);
+        const fixed = ensureAdmin(get().users, "u-admin");
+        set({
+          users: fixed.users.map((u) => (u.id === "u-admin" ? { ...u, email: ADMIN_EMAIL, password: sealed } : u)),
+          userId: "u-admin",
+        });
+      },
     }),
     {
       name: "promptlab-v1",
@@ -272,11 +305,15 @@ export function useHydrateApp() {
   const ready = useApp((s) => s.ready);
   useEffect(() => {
     if (useApp.persist.hasHydrated()) {
-      useApp.setState({ ready: true });
+      const state = useApp.getState();
+      useApp.setState({ ...ensureAdmin(state.users, state.userId), ready: true });
       return;
     }
     const pending = useApp.persist.rehydrate();
-    void Promise.resolve(pending).then(() => useApp.setState({ ready: true }));
+    void Promise.resolve(pending).then(() => {
+      const state = useApp.getState();
+      useApp.setState({ ...ensureAdmin(state.users, state.userId), ready: true });
+    });
   }, []);
   return ready;
 }
